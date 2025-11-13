@@ -291,7 +291,6 @@
       box-shadow:0 0 0 1px var(--accent);
       background:#050505;
     }
-    /* Better preview for color settings */
     input[type="color"].form-input {
       padding:0;
       height:32px;
@@ -485,31 +484,28 @@
     }
 
     .table-container {
-    background:#0a0a0a;
-    border-radius:8px;
-    border:1px solid var(--border);
-    overflow:hidden;
-    display:flex;
-    flex-direction:column;
-    /* force some vertical real estate so it can’t collapse to a line */
-    min-height:220px;
+      background:#0a0a0a;
+      border-radius:8px;
+      border:1px solid var(--border);
+      overflow:hidden;
+      display:flex;
+      flex-direction:column;
+      min-height:220px;
     }
-
     .table-header {
-    display:flex;
-    justify-content:space-between;
-    align-items:center;
-    padding:18px 24px;
-    border-bottom:1px solid var(--border);
-    background:#000;
-    color:#fff;
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      padding:18px 24px;
+      border-bottom:1px solid var(--border);
+      background:#000;
+      color:#fff;
     }
-
     .table-title {
-    font-size:14px;
-    font-weight:600;
-    text-transform:uppercase;
-    letter-spacing:.5px;
+      font-size:14px;
+      font-weight:600;
+      text-transform:uppercase;
+      letter-spacing:.5px;
     }
     .export-btn {
       background:var(--accent);
@@ -527,44 +523,29 @@
       transform:translateY(-1px);
       box-shadow:0 8px 18px rgba(0,0,0,0.4);
     }
-    table {
-  width:100%;
-  border-collapse:collapse;
-}
-
-thead {
-  background:#050505;
-}
-
-th {
-  padding:12px 24px;
-  text-align:left;
-  font-weight:600;
-  font-size:11px;
-  color:var(--muted);
-  text-transform:uppercase;
-  letter-spacing:.5px;
-}
-
-tbody {
-  background:#000;
-}
-
-tbody tr {
-  border-bottom:1px solid var(--border);
-  transition:background .15s ease;
-  cursor:pointer;
-}
-
-tbody tr:hover {
-  background:#050505;
-}
-
-td {
-  padding:12px 24px;
-  font-size:13px;
-  color:#fff;
-}
+    table { width:100%; border-collapse:collapse; }
+    thead { background:#050505; }
+    th {
+      padding:12px 24px;
+      text-align:left;
+      font-weight:600;
+      font-size:11px;
+      color:var(--muted);
+      text-transform:uppercase;
+      letter-spacing:.5px;
+    }
+    tbody { background:#000; }
+    tbody tr {
+      border-bottom:1px solid var(--border);
+      transition:background .15s ease;
+      cursor:pointer;
+    }
+    tbody tr:hover { background:#050505; }
+    td {
+      padding:12px 24px;
+      font-size:13px;
+      color:#fff;
+    }
     .trade-badge {
       display:inline-block;
       padding:4px 10px;
@@ -836,6 +817,7 @@ td {
             </div>
             <div class="session-controls">
               <button class="control-btn" id="newSessionBtn">New Session</button>
+              <button class="control-btn" id="autoToggleBtn">Auto: Off</button>
               <button class="control-btn primary" id="nextBtn">Next Candle →</button>
             </div>
           </div>
@@ -880,6 +862,11 @@ td {
             <div class="grid2">
               <button class="control-btn" id="closeBtn" title="C">Close Position</button>
               <button class="control-btn" id="resetBtn" title="R">Reset Session</button>
+            </div>
+            <div class="input-group">
+              <button class="control-btn primary" id="autoFastBtn" style="width:100%;">
+                Fast-Forward to Exit
+              </button>
             </div>
           </div>
 
@@ -1089,6 +1076,10 @@ td {
         <label class="form-label">Chart Down Candle Color</label>
         <input id="downColor" type="color" class="form-input" />
       </div>
+      <div class="form-group">
+        <label class="form-label">Auto-Advance Speed (ms)</label>
+        <input id="autoSpeed" type="number" class="form-input" min="10" step="10" />
+      </div>
       <div class="modal-actions">
         <button class="action-btn" id="resetTheme">Reset Theme</button>
         <button class="action-btn" id="resetData">Reset Data</button>
@@ -1124,6 +1115,7 @@ td {
         accent:'#ffffff',
         chartUp:'#ffffff',
         chartDown:'#666666',
+        autoSpeed:250,
       },
       get(){
         const saved = store.get(this.key, {});
@@ -1249,6 +1241,9 @@ td {
     }
 
     let chart;
+    let autoTimer = null;
+    let autoFastMode = false;
+
     async function ensureChart(){
       if (chart) chart.destroy();
       chart = await createCandleChart('#chart', {
@@ -1323,7 +1318,28 @@ td {
       if (!ensureActiveAccount()) return;
       const bar = session.segment[Math.max(0, session.ptr - 1)];
       if (!bar) return;
-      const qty = Math.max(1, parseInt($('#qtyInput').value || '1', 10));
+
+      const acctId = Accounts.activeId();
+      const acct = Accounts.all().find(a => a.id === acctId);
+      if (!acct) {
+        alert('No active account.');
+        return;
+      }
+
+      // Enforce "you can't buy more shares than your money"
+      const price = bar.close;
+      const balance = acct.balance || 0;
+      let qty = Math.max(1, parseInt($('#qtyInput').value || '1', 10));
+
+      const maxQtyByBalance = Math.floor(balance / price);
+      if (maxQtyByBalance <= 0) {
+        alert('Not enough balance to open even 1 share at this price.');
+        return;
+      }
+      if (qty > maxQtyByBalance) {
+        qty = maxQtyByBalance;
+        $('#qtyInput').value = String(qty);
+      }
 
       const newSide = (side === 'buy') ? 'long' : (side === 'sell' ? 'short' : side);
       if (session.position.side === newSide) return;
@@ -1334,7 +1350,7 @@ td {
 
       const slPct = parseFloat($('#slPct').value || '0') / 100;
       const tpPct = parseFloat($('#tpPct').value || '0') / 100;
-      const entry = bar.close;
+      const entry = price;
 
       let sl = $('#slAbs').value ? parseFloat($('#slAbs').value) : null;
       let tp = $('#tpAbs').value ? parseFloat($('#tpAbs').value) : null;
@@ -1439,20 +1455,61 @@ td {
       renderRecentTrades();
     }
 
+    function updateAutoUI(on, fast){
+      const btn = $('#autoToggleBtn');
+      if (!btn) return;
+      if (!on) {
+        btn.textContent = 'Auto: Off';
+        btn.classList.remove('primary');
+      } else {
+        btn.textContent = fast ? 'Auto: Fast' : 'Auto: On';
+        btn.classList.add('primary');
+      }
+    }
+
+    function stopAuto(){
+      if (autoTimer) {
+        clearInterval(autoTimer);
+        autoTimer = null;
+      }
+      autoFastMode = false;
+      updateAutoUI(false,false);
+    }
+
+    function startAuto(fast=false){
+      const speed = fast ? 10 : (Settings.get().autoSpeed || 250);
+      if (autoTimer) clearInterval(autoTimer);
+      autoFastMode = fast;
+      autoTimer = setInterval(() => {
+        if (session.ptr >= session.segment.length) {
+          stopAuto();
+          return;
+        }
+        step();
+        if (autoFastMode && session.position.side === 'flat') {
+          // We hit TP/SL or closed manually during step
+          stopAuto();
+        }
+      }, speed);
+      updateAutoUI(true, fast);
+    }
+
     function renderRecentTrades(){
       const list = $('#recentTrades');
       const rows = Trades.all().slice(-6).reverse();
-      list.innerHTML = rows.map(r => `
-        <div class="history-item" title="${new Date(r.ts).toLocaleString()}">
-          <div class="history-info">
-            <div class="history-type">${r.type.toUpperCase()}</div>
-            <div class="history-time">${r.qty} @ $${fmt2(r.entry)} (${r.symbol})</div>
-          </div>
-          <div class="history-pnl" style="color:${r.pnl >= 0 ? '#fff' : '#666'}">
-            ${r.pnl >= 0 ? '+' : ''}${fmt2(r.pnl)}
-          </div>
-        </div>
-      `).join('');
+      list.innerHTML = rows.length
+        ? rows.map(r => `
+            <div class="history-item" title="${new Date(r.ts).toLocaleString()}">
+              <div class="history-info">
+                <div class="history-type">${r.type.toUpperCase()}</div>
+                <div class="history-time">${r.qty} @ $${fmt2(r.entry)} (${r.symbol})</div>
+              </div>
+              <div class="history-pnl" style="color:${r.pnl >= 0 ? '#fff' : '#666'}">
+                ${r.pnl >= 0 ? '+' : ''}${fmt2(r.pnl)}
+              </div>
+            </div>
+          `).join('')
+        : `<div style="color:#666;font-size:13px;">No trades yet.</div>`;
     }
 
     function computeHistoryStats(trades){
@@ -1497,202 +1554,196 @@ td {
         .filter(t => !sessionText || (t.sessionId || '').toLowerCase().includes(sessionText));
     }
 
-   function renderHistory(){
-  const acctSel = $('#filterAccount');
-  const trades = filterTrades();
-  const stats = computeHistoryStats(trades);
+    function renderHistory(){
+      const acctSel = $('#filterAccount');
+      const trades = filterTrades();
+      const stats = computeHistoryStats(trades);
 
-  // Top stats cards
-  $('#historyStats').innerHTML = `
-    <div class="stat-card">
-      <div class="stat-card-label">Total Trades</div>
-      <div class="stat-card-value">${stats.total}</div>
-      <div class="stat-card-change">&nbsp;</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-card-label">Total P&L</div>
-      <div class="stat-card-value" style="color:#fff">
-        ${stats.pnl >= 0 ? '+' : ''}$${fmt2(stats.pnl)}
-      </div>
-      <div class="stat-card-change">&nbsp;</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-card-label">Win Rate</div>
-      <div class="stat-card-value">${stats.wr.toFixed(1)}%</div>
-      <div class="stat-card-change">&nbsp;</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-card-label">Avg. Win</div>
-      <div class="stat-card-value" style="color:#fff">$${fmt2(stats.avgW)}</div>
-      <div class="stat-card-change">Avg. Loss: $${fmt2(stats.avgL)}</div>
-    </div>
-  `;
-
-  // Equity curve
-  const curve = buildEquityCurve(trades);
-  const max = Math.max(1, ...curve.map(v => v.val));
-  $('#equityCurve').innerHTML = curve.length
-    ? curve.map(v => `
-        <div
-          class="bar"
-          title="${new Date(v.day).toLocaleDateString()} $${fmt2(v.val)}"
-          style="height:${Math.max(4, v.val / max * 100)}%"
-        ></div>
-      `).join('')
-    : `<div style="color:#666;font-size:13px;">No trades yet – nothing to plot.</div>`;
-
-  // All trades table
-  const tbody = $('#tradeTable');
-  if (!trades.length) {
-    tbody.innerHTML = `
-      <tr>
-        <td colspan="9" style="color:#666;font-size:13px;">
-          No trades match the current filters.
-        </td>
-      </tr>
-    `;
-  } else {
-    tbody.innerHTML = trades.map(t => `
-      <tr>
-        <td>${new Date(t.ts).toLocaleString()}</td>
-        <td>${t.accountName || '—'}</td>
-        <td><span class="trade-badge">${t.type.toUpperCase()}</span></td>
-        <td>${t.qty}</td>
-        <td>$${fmt2(t.entry)}</td>
-        <td>$${fmt2(t.exit)}</td>
-        <td style="color:${t.pnl >= 0 ? '#fff' : '#666'}">
-          ${t.pnl >= 0 ? '+' : ''}$${fmt2(t.pnl)}
-        </td>
-        <td style="color:${t.ret >= 0 ? '#fff' : '#666'}">
-          ${t.ret >= 0 ? '+' : ''}${fmt2(t.ret)}%
-        </td>
-      </tr>
-    `).join('');
-  }
-
-  // Account filter dropdown
-  const accts = Accounts.all();
-  const currentValue = acctSel.value || 'all';
-  acctSel.innerHTML =
-    `<option value="all">All Accounts</option>` +
-    accts.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
-  if (!currentValue || ![...acctSel.options].some(o => o.value === currentValue)) {
-    acctSel.value = 'all';
-  } else {
-    acctSel.value = currentValue;
-  }
-
-  // Filtered account summary ("Account Summary (Filtered)")
-  const perAccount = new Map();
-  for (const t of trades) {
-    const id = t.accountId || 'none';
-    if (!perAccount.has(id)) {
-      perAccount.set(id, {
-        id,
-        name: t.accountName || '—',
-        trades: 0,
-        wins: 0,
-        pnl: 0,
-        best: -Infinity,
-        worst: Infinity,
-      });
-    }
-    const s = perAccount.get(id);
-    s.trades += 1;
-    s.pnl += t.pnl;
-    if (t.pnl > 0) s.wins += 1;
-    if (t.pnl > s.best) s.best = t.pnl;
-    if (t.pnl < s.worst) s.worst = t.pnl;
-  }
-
-  const accBody = $('#accountHistoryBody');
-  const rows = [...perAccount.values()];
-  if (!rows.length) {
-    accBody.innerHTML = `
-      <tr>
-        <td colspan="8" style="color:#666;font-size:13px;">
-          No trades match the current filters for any account.
-        </td>
-      </tr>
-    `;
-  } else {
-    accBody.innerHTML = rows.map(s => {
-      const wr = s.trades ? (s.wins / s.trades * 100).toFixed(1) + '%' : '—';
-      const avg = s.trades ? s.pnl / s.trades : 0;
-      const best = s.best === -Infinity ? 0 : s.best;
-      const worst = s.worst === Infinity ? 0 : s.worst;
-      return `
-        <tr>
-          <td>${s.name}</td>
-          <td>${s.trades}</td>
-          <td>${s.wins}</td>
-          <td>${wr}</td>
-          <td style="color:${s.pnl >= 0 ? '#fff' : '#666'}">
-            ${s.pnl >= 0 ? '+' : ''}$${fmt2(s.pnl)}
-          </td>
-          <td>$${fmt2(avg)}</td>
-          <td style="color:${best >= 0 ? '#fff' : '#666'}">
-            ${best >= 0 ? '+' : ''}$${fmt2(best)}
-          </td>
-          <td style="color:${worst >= 0 ? '#fff' : '#666'}">
-            ${worst >= 0 ? '+' : ''}$${fmt2(worst)}
-          </td>
-        </tr>
+      $('#historyStats').innerHTML = `
+        <div class="stat-card">
+          <div class="stat-card-label">Total Trades</div>
+          <div class="stat-card-value">${stats.total}</div>
+          <div class="stat-card-change">&nbsp;</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-label">Total P&L</div>
+          <div class="stat-card-value" style="color:#fff">
+            ${stats.pnl >= 0 ? '+' : ''}$${fmt2(stats.pnl)}
+          </div>
+          <div class="stat-card-change">&nbsp;</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-label">Win Rate</div>
+          <div class="stat-card-value">${stats.wr.toFixed(1)}%</div>
+          <div class="stat-card-change">&nbsp;</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-label">Avg. Win</div>
+          <div class="stat-card-value" style="color:#fff">$${fmt2(stats.avgW)}</div>
+          <div class="stat-card-change">Avg. Loss: $${fmt2(stats.avgL)}</div>
+        </div>
       `;
-    }).join('');
-  }
 
-  // Active account full history (ALL TIME, ignores filters)
-  const activeId = Accounts.activeId();
-  const activeBody = $('#activeAccountBody');
-  if (!activeId) {
-    activeBody.innerHTML = `
-      <tr>
-        <td colspan="8" style="color:#666;font-size:13px;">
-          No active account selected – choose one in the Accounts tab.
-        </td>
-      </tr>
-    `;
-  } else {
-    const allTrades = Trades.all().filter(t => t.accountId === activeId);
-    if (!allTrades.length) {
-      activeBody.innerHTML = `
-        <tr>
-          <td colspan="8" style="color:#666;font-size:13px;">
-            No trades yet for this account.
-          </td>
-        </tr>
-      `;
-    } else {
-      activeBody.innerHTML = allTrades.map(t => `
-        <tr>
-          <td>${new Date(t.ts).toLocaleString()}</td>
-          <td><span class="trade-badge">${t.type.toUpperCase()}</span></td>
-          <td>${t.qty}</td>
-          <td>$${fmt2(t.entry)}</td>
-          <td>$${fmt2(t.exit)}</td>
-          <td style="color:${t.pnl >= 0 ? '#fff' : '#666'}">
-            ${t.pnl >= 0 ? '+' : ''}$${fmt2(t.pnl)}
-          </td>
-          <td style="color:${t.ret >= 0 ? '#fff' : '#666'}">
-            ${t.ret >= 0 ? '+' : ''}${fmt2(t.ret)}%
-          </td>
-        </tr>
-      `).join('');
+      const curve = buildEquityCurve(trades);
+      const max = Math.max(1, ...curve.map(v => v.val));
+      $('#equityCurve').innerHTML = curve.length
+        ? curve.map(v => `
+            <div
+              class="bar"
+              title="${new Date(v.day).toLocaleDateString()} $${fmt2(v.val)}"
+              style="height:${Math.max(4, v.val / max * 100)}%"
+            ></div>
+          `).join('')
+        : `<div style="color:#666;font-size:13px;">No trades yet – nothing to plot.</div>`;
+
+      const tbody = $('#tradeTable');
+      if (!trades.length) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="8" style="color:#666;font-size:13px;">
+              No trades match the current filters.
+            </td>
+          </tr>
+        `;
+      } else {
+        tbody.innerHTML = trades.map(t => `
+          <tr>
+            <td>${new Date(t.ts).toLocaleString()}</td>
+            <td>${t.accountName || '—'}</td>
+            <td><span class="trade-badge">${t.type.toUpperCase()}</span></td>
+            <td>${t.qty}</td>
+            <td>$${fmt2(t.entry)}</td>
+            <td>$${fmt2(t.exit)}</td>
+            <td style="color:${t.pnl >= 0 ? '#fff' : '#666'}">
+              ${t.pnl >= 0 ? '+' : ''}$${fmt2(t.pnl)}
+            </td>
+            <td style="color:${t.ret >= 0 ? '#fff' : '#666'}">
+              ${t.ret >= 0 ? '+' : ''}${fmt2(t.ret)}%
+            </td>
+          </tr>
+        `).join('');
+      }
+
+      const accts = Accounts.all();
+      const currentValue = acctSel.value || 'all';
+      acctSel.innerHTML =
+        `<option value="all">All Accounts</option>` +
+        accts.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
+      if (!currentValue || ![...acctSel.options].some(o => o.value === currentValue)) {
+        acctSel.value = 'all';
+      } else {
+        acctSel.value = currentValue;
+      }
+
+      // Filtered account summary
+      const perAccount = new Map();
+      for (const t of trades) {
+        const id = t.accountId || 'none';
+        if (!perAccount.has(id)) {
+          perAccount.set(id, {
+            id,
+            name: t.accountName || '—',
+            trades: 0,
+            wins: 0,
+            pnl: 0,
+            best: -Infinity,
+            worst: Infinity,
+          });
+        }
+        const s = perAccount.get(id);
+        s.trades += 1;
+        s.pnl += t.pnl;
+        if (t.pnl > 0) s.wins += 1;
+        if (t.pnl > s.best) s.best = t.pnl;
+        if (t.pnl < s.worst) s.worst = t.pnl;
+      }
+
+      const accBody = $('#accountHistoryBody');
+      const rows = [...perAccount.values()];
+      if (!rows.length) {
+        accBody.innerHTML = `
+          <tr>
+            <td colspan="8" style="color:#666;font-size:13px;">
+              No trades match the current filters for any account.
+            </td>
+          </tr>
+        `;
+      } else {
+        accBody.innerHTML = rows.map(s => {
+          const wr = s.trades ? (s.wins / s.trades * 100).toFixed(1) + '%' : '—';
+          const avg = s.trades ? s.pnl / s.trades : 0;
+          const best = s.best === -Infinity ? 0 : s.best;
+          const worst = s.worst === Infinity ? 0 : s.worst;
+          return `
+            <tr>
+              <td>${s.name}</td>
+              <td>${s.trades}</td>
+              <td>${s.wins}</td>
+              <td>${wr}</td>
+              <td style="color:${s.pnl >= 0 ? '#fff' : '#666'}">
+                ${s.pnl >= 0 ? '+' : ''}$${fmt2(s.pnl)}
+              </td>
+              <td>$${fmt2(avg)}</td>
+              <td style="color:${best >= 0 ? '#fff' : '#666'}">
+                ${best >= 0 ? '+' : ''}$${fmt2(best)}
+              </td>
+              <td style="color:${worst >= 0 ? '#fff' : '#666'}">
+                ${worst >= 0 ? '+' : ''}$${fmt2(worst)}
+              </td>
+            </tr>
+          `;
+        }).join('');
+      }
+
+      // Active account full history (ALL TIME)
+      const activeId = Accounts.activeId();
+      const activeBody = $('#activeAccountBody');
+      if (!activeId) {
+        activeBody.innerHTML = `
+          <tr>
+            <td colspan="7" style="color:#666;font-size:13px;">
+              No active account selected – choose one in the Accounts tab.
+            </td>
+          </tr>
+        `;
+      } else {
+        const allTrades = Trades.all().filter(t => t.accountId === activeId);
+        if (!allTrades.length) {
+          activeBody.innerHTML = `
+            <tr>
+              <td colspan="7" style="color:#666;font-size:13px;">
+                No trades yet for this account.
+              </td>
+            </tr>
+          `;
+        } else {
+          activeBody.innerHTML = allTrades.map(t => `
+            <tr>
+              <td>${new Date(t.ts).toLocaleString()}</td>
+              <td><span class="trade-badge">${t.type.toUpperCase()}</span></td>
+              <td>${t.qty}</td>
+              <td>$${fmt2(t.entry)}</td>
+              <td>$${fmt2(t.exit)}</td>
+              <td style="color:${t.pnl >= 0 ? '#fff' : '#666'}">
+                ${t.pnl >= 0 ? '+' : ''}$${fmt2(t.pnl)}
+              </td>
+              <td style="color:${t.ret >= 0 ? '#fff' : '#666'}">
+                ${t.ret >= 0 ? '+' : ''}${fmt2(t.ret)}%
+              </td>
+            </tr>
+          `).join('');
+        }
+      }
     }
-  }
-}
-
 
     function exportCSV(){
       const trades = filterTrades();
       const header = [
-        'Date','Account','Symbol','Type','Qty','Entry','Exit','PnL','ReturnPct'
+        'Date','Account','Type','Qty','Entry','Exit','PnL','ReturnPct'
       ];
       const rows = trades.map(t => [
         new Date(t.ts).toISOString(),
         t.accountName || '',
-        t.symbol || '',
         t.type || '',
         t.qty,
         t.entry,
@@ -1855,6 +1906,7 @@ td {
       $('#accentColor').value = s.accent;
       $('#upColor').value = s.chartUp;
       $('#downColor').value = s.chartDown;
+      $('#autoSpeed').value = s.autoSpeed;
       $('#settingsModal').classList.add('active');
     }
     function closeSettingsModal(){
@@ -1864,7 +1916,8 @@ td {
       const accent = $('#accentColor').value || '#ffffff';
       const up = $('#upColor').value || '#ffffff';
       const down = $('#downColor').value || '#666666';
-      Settings.set({ accent, chartUp: up, chartDown: down });
+      const autoSpeed = parseInt($('#autoSpeed').value || '250', 10);
+      Settings.set({ accent, chartUp: up, chartDown: down, autoSpeed });
       if (chart) chart.setColors({ up, down });
       closeSettingsModal();
     }
@@ -1874,6 +1927,7 @@ td {
       $('#accentColor').value = defaults.accent;
       $('#upColor').value = defaults.chartUp;
       $('#downColor').value = defaults.chartDown;
+      $('#autoSpeed').value = defaults.autoSpeed;
       if (chart) chart.setColors({ up: defaults.chartUp, down: defaults.chartDown });
     }
     function resetData(){
@@ -1914,6 +1968,7 @@ td {
     }
 
     async function newSession(){
+      stopAuto();
       session.position = { side:'flat', qty:1, entry:null, sl:null, tp:null, orderId:null };
       session.realized = 0;
       session.trades = 0;
@@ -1926,6 +1981,18 @@ td {
 
     $('#newSessionBtn').addEventListener('click', newSession);
     $('#nextBtn').addEventListener('click', step);
+    $('#autoToggleBtn').addEventListener('click', () => {
+      if (autoTimer) stopAuto();
+      else startAuto(false);
+    });
+    $('#autoFastBtn').addEventListener('click', () => {
+      if (session.position.side === 'flat') {
+        alert('Open a position with SL/TP before fast-forwarding.');
+        return;
+      }
+      startAuto(true);
+    });
+
     $('#buyBtn').addEventListener('click', () => placeEntry('long'));
     $('#sellBtn').addEventListener('click', () => placeEntry('short'));
     $('#closeBtn').addEventListener('click', () => closePosition());
@@ -1952,7 +2019,6 @@ td {
       const low = k.toLowerCase();
       const inTrading = $('#view-trading').classList.contains('active');
 
-      // Only react to hotkeys when Trading view is active
       const isTradeHotkey =
         k === 'ArrowRight' || k === ' ' ||
         ['n','b','s','c','r'].includes(low);
