@@ -862,11 +862,11 @@
             <div class="grid2">
               <div class="input-group">
                 <label class="input-label">Default SL (%)</label>
-                <input id="slPct" type="number" step="0.05" value="1.00" class="input-field" />
+                <input id="slPct" type="number" step="0.05" value="0.50" class="input-field" />
               </div>
               <div class="input-group">
                 <label class="input-label">Default TP (%)</label>
-                <input id="tpPct" type="number" step="0.05" value="2.00" class="input-field" />
+                <input id="tpPct" type="number" step="0.05" value="0.80" class="input-field" />
               </div>
             </div>
             <div class="grid2">
@@ -1307,9 +1307,12 @@
     }
 
     function resetChartView(){
-      if (!chart || !session.segment.length) return;
+      if (!chart || !session.segment.length) {console.log("aaa"); return;}
+      console.log('a');
       const upto = Math.max(1, session.ptr);
       chart.setData(session.segment.slice(0, upto));
+      // fit data
+      chart.resetView();
     }
 
     function intrabarExit(bar, side, sl, tp){
