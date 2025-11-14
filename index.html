@@ -1147,7 +1147,7 @@
   <script type="module">
     import createCandleChart from './scripts/tradingview-chart.js';
 
-    const FILES = ['data/BTCEUR.csv', 'data/BTCUSD.csv', 'data/ETHBTC.csv', 'data/LTCBTC.csv'];
+    const FILES = ['data/BTCUSDT.csv', 'data/BNBUSDT.csv', 'data/ETHUSDTa.csv', 'data/LTCUSDT.csv'];
     
     const SEGMENT_LEN = 2000;
     const INITIAL_CONTEXT = 200;
@@ -1237,24 +1237,32 @@
     let autoFastMode = false;
     let pendingSegmentEndPrice = null;
 
-    function parseCsv(text){
-      const lines = text.trim().split(/\r?\n/);
-      const rows = [];
-      for (let i = 3; i < lines.length; i++) {
-        const p = lines[i].split(',');
-        if (p.length < 6) continue;
-        const [datetime, close, high, low, open] = p;
-        rows.push({
-          time: toSec(datetime),
-          open:+open,
-          high:+high,
-          low:+low,
-          close:+close,
-        });
-      }
-      rows.sort((a,b) => a.time - b.time);
-      return rows;
+    function parseCsv(text) {
+        const lines = text.trim().split(/\r?\n/);
+        const rows = [];
+
+        for (let i = 0; i < lines.length; i++) {
+            const p = lines[i].split(',');
+
+            // skip header or malformed lines
+            if (p.length < 7 || p[0] === 'unix') continue;
+
+            const [unix, date, symbol, open, high, low, close] = p;
+
+            rows.push({
+            // unix is in ms -> convert to seconds
+            time: +unix / 1000,
+            open: +open,
+            high: +high,
+            low: +low,
+            close: +close,
+            });
+        }
+
+        rows.sort((a, b) => a.time - b.time);
+        return rows;
     }
+
 
     function updatePrice(px){
       $('#livePrice').textContent = px == null ? '—' : `$${fmt2(px)}`;
