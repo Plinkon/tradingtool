@@ -1429,7 +1429,7 @@
       }
 
       session.position = {
-        side: newSide,
+        side: (newSide === 'long' ? 'buy' : 'sell'),
         qty,
         entry,
         sl: sl ?? null,
