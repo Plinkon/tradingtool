@@ -374,6 +374,10 @@
       font-size:14px;
     }
 
+    #autoFastBtn {
+      margin-top:12px;
+    }
+
     .history-wrap {
       flex:1;
       padding:60px 40px;
@@ -523,6 +527,12 @@
       transform:translateY(-1px);
       box-shadow:0 8px 18px rgba(0,0,0,0.4);
     }
+
+    .table-scroll {
+      flex:1;
+      overflow-y:auto;
+    }
+
     table { width:100%; border-collapse:collapse; }
     thead { background:#050505; }
     th {
@@ -754,7 +764,16 @@
     .modal-title {
       font-size:28px;
       font-weight:600;
-      margin-bottom:24px;
+      margin-bottom:16px;
+    }
+    .modal-text {
+      color:var(--muted);
+      font-size:14px;
+      margin-bottom:16px;
+    }
+    .modal-highlight {
+      color:#fff;
+      font-weight:600;
     }
     .form-group { margin-bottom:20px; }
     .form-label {
@@ -817,6 +836,7 @@
             </div>
             <div class="session-controls">
               <button class="control-btn" id="newSessionBtn">New Session</button>
+              <button class="control-btn" id="resetViewBtn">Reset View</button>
               <button class="control-btn" id="autoToggleBtn">Auto: Off</button>
               <button class="control-btn primary" id="nextBtn">Next Candle →</button>
             </div>
@@ -952,26 +972,29 @@
             </div>
           </div>
 
+          <!-- All Trades -->
           <div class="table-container">
             <div class="table-header">
               <div class="table-title">All Trades</div>
               <button class="export-btn" id="exportBtn">Export CSV</button>
             </div>
-            <table>
-              <thead>
-                <tr>
-                  <th>Date & Time</th>
-                  <th>Account</th>
-                  <th>Type</th>
-                  <th>Qty</th>
-                  <th>Entry</th>
-                  <th>Exit</th>
-                  <th>P&L</th>
-                  <th>Return %</th>
-                </tr>
-              </thead>
-              <tbody id="tradeTable"></tbody>
-            </table>
+            <div class="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Date & Time</th>
+                    <th>Account</th>
+                    <th>Type</th>
+                    <th>Qty</th>
+                    <th>Entry</th>
+                    <th>Exit</th>
+                    <th>P&L</th>
+                    <th>Return %</th>
+                  </tr>
+                </thead>
+                <tbody id="tradeTable"></tbody>
+              </table>
+            </div>
           </div>
 
           <!-- Filtered account summary -->
@@ -979,21 +1002,23 @@
             <div class="table-header">
               <div class="table-title">Account Summary (Filtered)</div>
             </div>
-            <table>
-              <thead>
-                <tr>
-                  <th>Account</th>
-                  <th>Trades</th>
-                  <th>Wins</th>
-                  <th>Win Rate</th>
-                  <th>Total P&L</th>
-                  <th>Avg Trade</th>
-                  <th>Best Trade</th>
-                  <th>Worst Trade</th>
-                </tr>
-              </thead>
-              <tbody id="accountHistoryBody"></tbody>
-            </table>
+            <div class="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Account</th>
+                    <th>Trades</th>
+                    <th>Wins</th>
+                    <th>Win Rate</th>
+                    <th>Total P&L</th>
+                    <th>Avg Trade</th>
+                    <th>Best Trade</th>
+                    <th>Worst Trade</th>
+                  </tr>
+                </thead>
+                <tbody id="accountHistoryBody"></tbody>
+              </table>
+            </div>
           </div>
 
           <!-- Active account full history -->
@@ -1001,20 +1026,22 @@
             <div class="table-header">
               <div class="table-title">Active Account Trading History (All Time)</div>
             </div>
-            <table>
-              <thead>
-                <tr>
-                  <th>Date & Time</th>
-                  <th>Type</th>
-                  <th>Qty</th>
-                  <th>Entry</th>
-                  <th>Exit</th>
-                  <th>P&L</th>
-                  <th>Return %</th>
-                </tr>
-              </thead>
-              <tbody id="activeAccountBody"></tbody>
-            </table>
+            <div class="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Date & Time</th>
+                    <th>Type</th>
+                    <th>Qty</th>
+                    <th>Entry</th>
+                    <th>Exit</th>
+                    <th>P&L</th>
+                    <th>Return %</th>
+                  </tr>
+                </thead>
+                <tbody id="activeAccountBody"></tbody>
+              </table>
+            </div>
           </div>
         </div>
       </section>
@@ -1089,17 +1116,41 @@
     </div>
   </div>
 
+  <!-- Segment End Modal -->
+  <div class="modal-overlay" id="segmentEndModal">
+    <div class="modal" role="dialog" aria-modal="true">
+      <div class="modal-title">Segment Ended with Open Position</div>
+      <div class="modal-text">
+        You reached the end of this 1000-candle segment while still in a trade.
+      </div>
+      <div class="modal-text">
+        Last candle close: <span class="modal-highlight" id="segEndPriceLabel">—</span>
+      </div>
+      <div class="modal-text">
+        Choose how to finalize this trade:
+      </div>
+      <ul class="modal-text">
+        <li><span class="modal-highlight">Close &amp; ignore P&amp;L</span> – mark as segment end, do not affect account P&amp;L.</li>
+        <li><span class="modal-highlight">Close at last price</span> – realize full P&amp;L into the account.</li>
+      </ul>
+      <div class="modal-actions">
+        <button class="action-btn" id="segEndIgnoreBtn">
+          Close, don't count P&amp;L
+        </button>
+        <button class="action-btn primary" id="segEndApplyBtn">
+          Close at last price &amp; count P&amp;L
+        </button>
+      </div>
+    </div>
+  </div>
+
   <script type="module">
     import createCandleChart from './scripts/tradingview-chart.js';
 
-    const FILES = [
-      'data/AAPL_1.csv','data/AAPL_3.csv',
-      'data/AMZN_1.csv','data/AMZN_3.csv',
-      'data/MSFT_1.csv','data/MSFT_3.csv',
-      'data/GOOG_1.csv','data/GOOG_3.csv'
-    ];
-    const SEGMENT_LEN = 1000;
-    const INITIAL_CONTEXT = 120;
+    const FILES = ['data/NVDA', 'data/AAPL', 'data/MSFT', 'data/GOOGL', 'data/GOOG', 'data/AMZN', 'data/META', 'data/AVGO', 'data/TSLA', 'data/BRK.B', 'data/LLY', 'data/JPM', 'data/V', 'data/WMT', 'data/NFLX', 'data/XOM', 'data/MA', 'data/HD', 'data/PG', 'data/JNJ', 'data/UNH', 'data/NVDA', 'data/CRM', 'data/DIS', 'data/BAC', 'data/PYPL', 'data/ADBE', 'data/INTC', 'data/CSCO', 'data/CMCSA', 'data/ORCL', 'data/T', 'data/VZ', 'data/KO', 'data/PFE', 'data/COST', 'data/PEP', 'data/NKE', 'data/ABBV', 'data/MCD', 'data/WFC', 'data/ACN', 'data/TXN', 'data/AVY', 'data/MDT', 'data/C', 'data/QCOM', 'data/SAP', 'data/BMY', 'data/LIN', 'data/AMGN', 'data/PM', 'data/UPS', 'data/MS', 'data/GS', 'data/BLK', 'data/RTX', 'data/HON', 'data/CAT', 'data/CVX', 'data/DE', 'data/IBM', 'data/GE', 'data/LMT', 'data/AXP', 'data/BDX', 'data/SYK', 'data/GILD', 'data/ISRG', 'data/MO', 'data/SPGI', 'data/PLD', 'data/EL', 'data/ADP', 'data/BKNG', 'data/CI', 'data/MDLZ', 'data/MMM', 'data/DUK', 'data/SO', 'data/TGT', 'data/FDX', 'data/ZTS', 'data/AON', 'data/MMC', 'data/CB', 'data/AEP', 'data/NEE', 'data/EOG', 'data/SLB', 'data/PSX', 'data/COP', 'data/HUM', 'data/REGN', 'data/MAR', 'data/SBUX', 'data/GM', 'data/F', 'data/DAL', 'data/UAL', 'data/CSX', 'data/NSC', 'data/ADSK', 'data/TEAM', 'data/NOW', 'data/SNOW', 'data/PANW', 'data/NET', 'data/CRWD', 'data/DDOG', 'data/SHOP', 'data/SQ', 'data/ROKU', 'data/TWLO', 'data/UBER', 'data/LYFT', 'data/ABNB', 'data/DKNG', 'data/ROBL', 'data/PLTR', 'data/VWAGY', 'data/SONY', 'data/TM', 'data/HMC', 'data/BP', 'data/TOT', 'data/BHP', 'data/RIO', 'data/NEM', 'data/VALE', 'data/SPOT', 'data/EA', 'data/TTWO', 'data/ATVI', 'data/CHWY', 'data/RBLX', 'data/COIN', 'data/HOOD', 'data/ETSY', 'data/DOCU', 'data/ZM', 'data/BABA', 'data/JD', 'data/PDD', 'data/TCEHY'];
+    
+    const SEGMENT_LEN = 1800;
+    const INITIAL_CONTEXT = 200;
 
     const store = {
       get(key, fallback){
@@ -1181,6 +1232,11 @@
     const fmt2 = x => (x == null || Number.isNaN(x)) ? '—' : (Math.round(x * 100) / 100).toFixed(2);
     const toSec = ts => Math.floor(Date.parse(ts) / 1000);
 
+    let chart;
+    let autoTimer = null;
+    let autoFastMode = false;
+    let pendingSegmentEndPrice = null;
+
     function parseCsv(text){
       const lines = text.trim().split(/\r?\n/);
       const rows = [];
@@ -1240,10 +1296,6 @@
       document.documentElement.style.setProperty('--accent', settings.accent);
     }
 
-    let chart;
-    let autoTimer = null;
-    let autoFastMode = false;
-
     async function ensureChart(){
       if (chart) chart.destroy();
       chart = await createCandleChart('#chart', {
@@ -1252,6 +1304,12 @@
       });
       const s = Settings.get();
       chart.setColors({ up: s.chartUp, down: s.chartDown });
+    }
+
+    function resetChartView(){
+      if (!chart || !session.segment.length) return;
+      const upto = Math.max(1, session.ptr);
+      chart.setData(session.segment.slice(0, upto));
     }
 
     function intrabarExit(bar, side, sl, tp){
@@ -1285,7 +1343,7 @@
           session.position.tp
         );
         if (hit != null) {
-          closePosition(hit);
+          closePosition(hit, 'sl_tp', true);
         }
       }
 
@@ -1301,6 +1359,14 @@
       updateCandleCounter();
       updatePerf();
       renderRecentTrades();
+
+      // If we just consumed the last candle and still have an open trade, prompt the user.
+      if (session.ptr >= session.segment.length && session.position.side !== 'flat') {
+        pendingSegmentEndPrice = bar.close;
+        stopAuto();
+        $('#segEndPriceLabel').textContent = `$${fmt2(pendingSegmentEndPrice)}`;
+        $('#segmentEndModal').classList.add('active');
+      }
     }
 
     function ensureActiveAccount(){
@@ -1326,7 +1392,6 @@
         return;
       }
 
-      // Enforce "you can't buy more shares than your money"
       const price = bar.close;
       const balance = acct.balance || 0;
       let qty = Math.max(1, parseInt($('#qtyInput').value || '1', 10));
@@ -1345,7 +1410,7 @@
       if (session.position.side === newSide) return;
 
       if (session.position.side !== 'flat') {
-        closePosition(bar.close);
+        closePosition(bar.close, 'manual', true);
       }
 
       const slPct = parseFloat($('#slPct').value || '0') / 100;
@@ -1364,7 +1429,7 @@
       }
 
       session.position = {
-        side:newSide,
+        side: (newSide === 'long' ? 'buy' : 'sell'),
         qty,
         entry,
         sl: sl ?? null,
@@ -1376,7 +1441,7 @@
       const id = chart.placeOrder({
         time: bar.time,
         price: entry,
-        side: (newSide === 'long' ? 'buy' : 'sell'),
+        side: newSide,
         sl: session.position.sl ?? undefined,
         tp: session.position.tp ?? undefined
       });
@@ -1393,7 +1458,8 @@
       updatePerf();
     }
 
-    function closePosition(exitPx = null){
+    // countPnL controls whether P&L affects account + session stats
+    function closePosition(exitPx = null, reason = 'manual', countPnL = true){
       if (session.position.side === 'flat') return;
       if (!ensureActiveAccount()) return;
       const bar = session.segment[Math.max(0, session.ptr - 1)];
@@ -1405,9 +1471,14 @@
       if (side === 'long') pnl = (px - entry) * qty;
       if (side === 'short') pnl = (entry - px) * qty;
 
-      session.realized += pnl;
-      session.trades += 1;
-      if (pnl > 0) session.wins += 1;
+      if (countPnL) {
+        session.realized += pnl;
+        session.trades += 1;
+        if (pnl > 0) session.wins += 1;
+      } else {
+        // still count the trade in "Trades" but don't let it affect win-rate/P&L
+        session.trades += 1;
+      }
 
       const acctId = Accounts.activeId();
       const acct = Accounts.all().find(a => a.id === acctId);
@@ -1421,16 +1492,19 @@
         qty,
         entry,
         exit: px,
-        pnl,
-        ret: entry ? ((px - entry) * (side === 'long' ? 1 : -1) / entry * 100) : 0
+        pnl: countPnL ? pnl : 0,
+        ret: countPnL && entry ? ((px - entry) * (side === 'long' ? 1 : -1) / entry * 100) : 0,
+        reason, // 'manual', 'sl_tp', 'segmentEndNoPnL', 'segmentEndCountPnL', etc.
       };
       Trades.add(trade);
 
       if (acct) {
-        acct.balance = (acct.balance ?? 0) + pnl;
         acct.trades = (acct.trades ?? 0) + 1;
-        acct.realized = (acct.realized ?? 0) + pnl;
-        acct.wins = (acct.wins ?? 0) + (pnl > 0 ? 1 : 0);
+        if (countPnL) {
+          acct.balance = (acct.balance ?? 0) + pnl;
+          acct.realized = (acct.realized ?? 0) + pnl;
+          acct.wins = (acct.wins ?? 0) + (pnl > 0 ? 1 : 0);
+        }
         Accounts.upsert(acct);
       }
 
@@ -1486,10 +1560,6 @@
           return;
         }
         step();
-        if (autoFastMode && session.position.side === 'flat') {
-          // We hit TP/SL or closed manually during step
-          stopAuto();
-        }
       }, speed);
       updateAutoUI(true, fast);
     }
@@ -1546,7 +1616,10 @@
         ? 0
         : Date.now() - Number(range) * 24 * 3600 * 1000;
 
+      const liveIds = new Set(Accounts.all().map(a => a.id));
+
       return all
+        .filter(t => !t.accountId || liveIds.has(t.accountId))
         .filter(t => t.ts >= cutoff)
         .filter(t => accountId === 'all' || t.accountId === accountId)
         .filter(t => type === 'all' || t.type === type)
@@ -1980,6 +2053,7 @@
     }
 
     $('#newSessionBtn').addEventListener('click', newSession);
+    $('#resetViewBtn').addEventListener('click', resetChartView);
     $('#nextBtn').addEventListener('click', step);
     $('#autoToggleBtn').addEventListener('click', () => {
       if (autoTimer) stopAuto();
@@ -1995,7 +2069,7 @@
 
     $('#buyBtn').addEventListener('click', () => placeEntry('long'));
     $('#sellBtn').addEventListener('click', () => placeEntry('short'));
-    $('#closeBtn').addEventListener('click', () => closePosition());
+    $('#closeBtn').addEventListener('click', () => closePosition(null, 'manual', true));
     $('#resetBtn').addEventListener('click', resetSession);
 
     $('#openCreate').addEventListener('click', openCreateModal);
@@ -2012,6 +2086,22 @@
     $('#resetData').addEventListener('click', resetData);
     $('#settingsModal').addEventListener('click', (e) => {
       if (e.target.id === 'settingsModal') closeSettingsModal();
+    });
+
+    // Segment end modal actions
+    $('#segEndIgnoreBtn').addEventListener('click', () => {
+      if (pendingSegmentEndPrice != null) {
+        closePosition(pendingSegmentEndPrice, 'segmentEndNoPnL', false);
+      }
+      pendingSegmentEndPrice = null;
+      $('#segmentEndModal').classList.remove('active');
+    });
+    $('#segEndApplyBtn').addEventListener('click', () => {
+      if (pendingSegmentEndPrice != null) {
+        closePosition(pendingSegmentEndPrice, 'segmentEndCountPnL', true);
+      }
+      pendingSegmentEndPrice = null;
+      $('#segmentEndModal').classList.remove('active');
     });
 
     window.addEventListener('keydown', (e) => {
@@ -2036,7 +2126,7 @@
         placeEntry('short');
       } else if (low === 'c') {
         e.preventDefault();
-        closePosition();
+        closePosition(null, 'manual', true);
       } else if (low === 'r') {
         e.preventDefault();
         newSession();
