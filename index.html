@@ -1429,7 +1429,7 @@
       }
 
       session.position = {
-        side: (newSide === 'long' ? 'buy' : 'sell'),
+        side: newSide,
         qty,
         entry,
         sl: sl ?? null,
@@ -1441,7 +1441,7 @@
       const id = chart.placeOrder({
         time: bar.time,
         price: entry,
-        side: newSide,
+        side: (newSide === 'long' ? 'buy' : 'sell'),
         sl: session.position.sl ?? undefined,
         tp: session.position.tp ?? undefined
       });
