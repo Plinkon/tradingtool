@@ -1313,14 +1313,14 @@
     }
 
     function intrabarExit(bar, side, sl, tp){
-      if (side === 'long') {
+      if (side === 'long' || side === 'buy') {
         const hitSL = sl != null && bar.low <= sl;
         const hitTP = tp != null && bar.high >= tp;
         if (hitSL && hitTP) {
           return (bar.close >= bar.open) ? tp : sl;
         }
         return hitTP ? tp : (hitSL ? sl : null);
-      } else if (side === 'short') {
+      } else if (side === 'short' || side === 'sell') {
         const hitSL = sl != null && bar.high >= sl;
         const hitTP = tp != null && bar.low <= tp;
         if (hitSL && hitTP) {
@@ -1344,6 +1344,7 @@
         );
         if (hit != null) {
           closePosition(hit, 'sl_tp', true);
+          stopAuto();
         }
       }
 
