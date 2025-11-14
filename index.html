@@ -1147,9 +1147,12 @@
   <script type="module">
     import createCandleChart from './scripts/tradingview-chart.js';
 
-    const FILES = ['data/BTCUSDT.csv', 'data/BNBUSDT.csv', 'data/ETHUSDTa.csv', 'data/LTCUSDT.csv'];
+    const FILES = [
+      "data/ABBV_history.csv", "data/AXP_history.csv", "data/T_history.csv", "data/BA_history.csv", "data/CAT_history.csv", "data/CVX_history.csv", "data/KO_history.csv", "data/CL_history.csv", "data/DD_history.csv",
+      "data/XOM_history.csv", "data/GE_history.csv", "data/IBM_history.csv", "data/JNJ_history.csv", "data/MCD_history.csv", "data/MRK_history.csv", "data/PEP_history.csv", "data/PG_history.csv", "data/TXN_history.csv", "data/WMT_history.csv"
+    ];
     
-    const SEGMENT_LEN = 2000;
+    const SEGMENT_LEN = 1000;
     const INITIAL_CONTEXT = 200;
 
     const store = {
@@ -1238,30 +1241,35 @@
     let pendingSegmentEndPrice = null;
 
     function parseCsv(text) {
-        const lines = text.trim().split(/\r?\n/);
-        const rows = [];
+    const lines = text.trim().split(/\r?\n/);
+    const rows = [];
 
-        for (let i = 0; i < lines.length; i++) {
-            const p = lines[i].split(',');
+    for (let i = 0; i < lines.length; i++) {
+        const cols = lines[i].split(',');
 
-            // skip header or malformed lines
-            if (p.length < 7 || p[0] === 'unix') continue;
+        // need at least: Date, Close, High, Low, Open
+        if (cols.length < 5) continue;
 
-            const [unix, date, symbol, open, high, low, close] = p;
+        const [dateStr, close, high, low, open] = cols;
 
-            rows.push({
-            // unix is in ms -> convert to seconds
-            time: +unix / 1000,
+        // skip header/meta rows
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) continue;
+
+        // treat date as UTC midnight
+        const time = Math.floor(new Date(dateStr + 'T00:00:00Z').getTime() / 1000);
+
+        rows.push({
+            time,
             open: +open,
             high: +high,
             low: +low,
             close: +close,
-            });
-        }
-
-        rows.sort((a, b) => a.time - b.time);
-        return rows;
+        });
     }
+
+    rows.sort((a, b) => a.time - b.time);
+    return rows;
+}
 
 
     function updatePrice(px){
