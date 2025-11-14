@@ -76,6 +76,25 @@ export default async function createCandleChart(container, options = {}) {
   const vol = chart.addHistogramSeries({ ...volumeStyle });
 
   // ---------- Data API ----------
+  const resetView = () => {
+    // --- Time scale reset ---
+    const timeScale = chart.timeScale();
+    timeScale.fitContent();
+    timeScale.applyOptions({ fixLeftEdge: true });
+    timeScale.scrollToRealTime();
+
+    // --- Price scale reset (this is what you're missing) ---
+    // Use the series' price scale so this stays correct even if you change priceScaleId later
+    const priceScale = candle.priceScale();
+
+    priceScale.applyOptions({
+      autoScale: true,          // re-enable autoscale so it follows visible bars
+      // keep your existing margins so the look stays consistent
+      scaleMargins: rightPriceScale.scaleMargins ?? { top: 0.1, bottom: 0.2 },
+    });
+  };
+
+
   const setData = (rows) => {
     const bars = normalizeBars(rows, { dataMapping, arrayMapping, skipLeadingHeaderRows })
       .sort((a, b) => a.time - b.time);
@@ -305,7 +324,7 @@ export default async function createCandleChart(container, options = {}) {
 
   return {
     chart, candle, volume: vol,
-    setData, update, /*fit,*/ setPriceLine, addLineSeries, setColors, destroy,
+    setData, update, /*fit,*/ setPriceLine, addLineSeries, setColors, destroy, resetView,
     // Orders API
     placeOrder, updateOrder, cancelOrder, listOrders, getOrder, onOrderChange,
   };
