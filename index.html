@@ -698,6 +698,7 @@
     .stat-box .stat-value { font-size:18px; }
     .action-buttons {
       display:flex;
+      flex-wrap:wrap;
       gap:12px;
     }
     .action-btn {
@@ -1054,7 +1055,10 @@
               <div class="page-title">Accounts</div>
               <div class="page-subtitle">Manage your paper trading accounts (Maximum 3)</div>
             </div>
-            <button class="control-btn primary" id="openCreate">Create Account</button>
+            <div style="display:flex; gap:10px;">
+              <button class="control-btn" id="openImport">Import Account</button>
+              <button class="control-btn primary" id="openCreate">Create Account</button>
+            </div>
           </div>
 
           <div class="info-section">
@@ -1144,6 +1148,46 @@
     </div>
   </div>
 
+  <!-- Export Account Key Modal -->
+  <div class="modal-overlay" id="exportKeyModal">
+    <div class="modal" role="dialog" aria-modal="true">
+      <div class="modal-title">Account Key</div>
+      <div class="modal-text">
+        Copy this Account Key to restore this account on another device or after resetting data.
+      </div>
+      <div class="form-group">
+        <label class="form-label">Account Key</label>
+        <textarea id="exportKeyTextarea" class="form-input" rows="4" readonly></textarea>
+      </div>
+      <div class="modal-actions">
+        <button class="action-btn" id="closeExportKey">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Import Account Key Modal -->
+  <div class="modal-overlay" id="importKeyModal">
+    <div class="modal" role="dialog" aria-modal="true">
+      <div class="modal-title">Import Account</div>
+      <div class="modal-text">
+        Paste an Account Key to restore an account and its trade history.
+      </div>
+      <div class="form-group">
+        <label class="form-label">Account Key</label>
+        <textarea
+          id="importKeyTextarea"
+          class="form-input"
+          rows="4"
+          placeholder="Paste Account Key here"
+        ></textarea>
+      </div>
+      <div class="modal-actions">
+        <button class="action-btn" id="cancelImportKey">Cancel</button>
+        <button class="action-btn primary" id="confirmImportKey">Import</button>
+      </div>
+    </div>
+  </div>
+
   <script type="module">
     import createCandleChart from './scripts/tradingview-chart.js';
 
@@ -1153,7 +1197,7 @@
     ];
     
     const SEGMENT_LEN = 500;
-    const INITIAL_CONTEXT = 120;
+    const INITIAL_CONTEXT = 200;
 
     const store = {
       get(key, fallback){
@@ -1214,7 +1258,80 @@
         arr.push(t);
         store.set(this.key, arr);
       },
+      importMany(list){
+        if (!Array.isArray(list) || !list.length) return;
+        const existing = this.all();
+        const ids = new Set(existing.map(t => t.id));
+        let changed = false;
+        for (const t of list) {
+          if (!t || !t.id) continue;
+          if (!ids.has(t.id)) {
+            existing.push(t);
+            ids.add(t.id);
+            changed = true;
+          }
+        }
+        if (changed) store.set(this.key, existing);
+      },
     };
+
+    function makeAccountKey(accountId){
+      const acct = Accounts.all().find(a => a.id === accountId);
+      if (!acct) throw new Error('Account not found');
+
+      const trades = Trades.all().filter(t => t.accountId === accountId);
+
+      const payload = {
+        v: 1,
+        type: 'account',
+        account: acct,
+        trades,
+      };
+
+      return btoa(JSON.stringify(payload));
+    }
+
+    function parseAccountKey(str){
+      try {
+        const json = JSON.parse(atob(str.trim()));
+        if (!json || json.v !== 1 || json.type !== 'account' || !json.account) {
+          throw new Error('Invalid Account Key');
+        }
+        return json;
+      } catch (e) {
+        throw new Error('Invalid Account Key');
+      }
+    }
+
+    function importAccountFromKey(str){
+      const { account, trades } = parseAccountKey(str);
+
+      const existingAccounts = Accounts.all();
+      let id = account.id;
+
+      if (existingAccounts.some(a => a.id === id)) {
+        const newId = crypto.randomUUID();
+        account.id = newId;
+        if (Array.isArray(trades)) {
+          trades.forEach(t => { t.accountId = newId; });
+        }
+      }
+
+      Accounts.upsert(account);
+
+      if (Array.isArray(trades) && trades.length) {
+        Trades.importMany(trades);
+      }
+
+      if (!Accounts.activeId()) {
+        Accounts.setActive(account.id);
+      }
+
+      renderAccounts();
+      renderHistory();
+
+      alert('Account imported successfully.');
+    }
 
     let session = {
       symbol: null,
@@ -1241,35 +1358,32 @@
     let pendingSegmentEndPrice = null;
 
     function parseCsv(text) {
-    const lines = text.trim().split(/\r?\n/);
-    const rows = [];
+      const lines = text.trim().split(/\r?\n/);
+      const rows = [];
 
-    for (let i = 0; i < lines.length; i++) {
-        const cols = lines[i].split(',');
+      for (let i = 0; i < lines.length; i++) {
+          const cols = lines[i].split(',');
 
-        // need at least: Date, Close, High, Low, Open
-        if (cols.length < 5) continue;
+          if (cols.length < 5) continue;
 
-        const [dateStr, close, high, low, open] = cols;
+          const [dateStr, close, high, low, open] = cols;
 
-        // skip header/meta rows
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) continue;
+          if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) continue;
 
-        // treat date as UTC midnight
-        const time = Math.floor(new Date(dateStr + 'T00:00:00Z').getTime() / 1000);
+          const time = Math.floor(new Date(dateStr + 'T00:00:00Z').getTime() / 1000);
 
-        rows.push({
-            time,
-            open: +open,
-            high: +high,
-            low: +low,
-            close: +close,
-        });
+          rows.push({
+              time,
+              open: +open,
+              high: +high,
+              low: +low,
+              close: +close,
+          });
+      }
+
+      rows.sort((a, b) => a.time - b.time);
+      return rows;
     }
-
-    rows.sort((a, b) => a.time - b.time);
-    return rows;
-}
 
 
     function updatePrice(px){
@@ -1327,7 +1441,6 @@
       console.log('a');
       const upto = Math.max(1, session.ptr);
       chart.setData(session.segment.slice(0, upto));
-      // fit data
       chart.resetView();
     }
 
@@ -1380,7 +1493,6 @@
       updatePerf();
       renderRecentTrades();
 
-      // If we just consumed the last candle and still have an open trade, prompt the user.
       if (session.ptr >= session.segment.length && session.position.side !== 'flat') {
         pendingSegmentEndPrice = bar.close;
         stopAuto();
@@ -1478,7 +1590,6 @@
       updatePerf();
     }
 
-    // countPnL controls whether P&L affects account + session stats
     function closePosition(exitPx = null, reason = 'manual', countPnL = true){
       if (session.position.side === 'flat') return;
       if (!ensureActiveAccount()) return;
@@ -1496,7 +1607,6 @@
         session.trades += 1;
         if (pnl > 0) session.wins += 1;
       } else {
-        // still count the trade in "Trades" but don't let it affect win-rate/P&L
         session.trades += 1;
       }
 
@@ -1514,7 +1624,7 @@
         exit: px,
         pnl: countPnL ? pnl : 0,
         ret: countPnL && entry ? ((px - entry) * (side === 'long' ? 1 : -1) / entry * 100) : 0,
-        reason, // 'manual', 'sl_tp', 'segmentEndNoPnL', 'segmentEndCountPnL', etc.
+        reason,
       };
       Trades.add(trade);
 
@@ -1602,17 +1712,6 @@
         : `<div style="color:#666;font-size:13px;">No trades yet.</div>`;
     }
 
-    function computeHistoryStats(trades){
-      const total = trades.length;
-      const pnl = trades.reduce((s,t) => s + t.pnl, 0);
-      const wins = trades.filter(t => t.pnl > 0).length;
-      const wr = total ? wins / total * 100 : 0;
-      const avgW = trades.filter(t => t.pnl > 0).reduce((s,t) => s + t.pnl, 0) / (wins || 1);
-      const avgL = trades.filter(t => t.pnl < 0).reduce((s,t) => s + t.pnl, 0) /
-                   Math.max(1, (total - wins));
-      return { total, pnl, wr, avgW, avgL };
-    }
-
     function buildEquityCurve(trades){
       const days = [...new Set(trades.map(t => new Date(t.ts).toDateString()))]
         .sort((a,b) => new Date(a) - new Date(b));
@@ -1622,6 +1721,27 @@
         cum += dayTrades.reduce((s,t) => s + t.pnl, 0);
         return { day:new Date(d), val:cum };
       });
+    }
+
+    function computeHistoryStats(trades, curveOverride){
+      const total = trades.length;
+      const pnl = trades.reduce((s,t) => s + t.pnl, 0);
+      const wins = trades.filter(t => t.pnl > 0).length;
+      const wr = total ? wins / total * 100 : 0;
+      const avgW = trades.filter(t => t.pnl > 0).reduce((s,t) => s + t.pnl, 0) / (wins || 1);
+      const avgL = trades.filter(t => t.pnl < 0).reduce((s,t) => s + t.pnl, 0) /
+                   Math.max(1, (total - wins));
+
+      const curve = curveOverride || buildEquityCurve(trades);
+      let peak = 0;
+      let maxDD = 0;
+      for (const p of curve) {
+        if (p.val > peak) peak = p.val;
+        const dd = peak - p.val;
+        if (dd > maxDD) maxDD = dd;
+      }
+
+      return { total, pnl, wr, avgW, avgL, maxDD };
     }
 
     function filterTrades(){
@@ -1650,7 +1770,8 @@
     function renderHistory(){
       const acctSel = $('#filterAccount');
       const trades = filterTrades();
-      const stats = computeHistoryStats(trades);
+      const curve = buildEquityCurve(trades);
+      const stats = computeHistoryStats(trades, curve);
 
       $('#historyStats').innerHTML = `
         <div class="stat-card">
@@ -1675,9 +1796,15 @@
           <div class="stat-card-value" style="color:#fff">$${fmt2(stats.avgW)}</div>
           <div class="stat-card-change">Avg. Loss: $${fmt2(stats.avgL)}</div>
         </div>
+        <div class="stat-card">
+          <div class="stat-card-label">Max Drawdown</div>
+          <div class="stat-card-value" style="color:${stats.maxDD > 0 ? '#666' : '#fff'}">
+            ${stats.maxDD > 0 ? '-' : ''}$${fmt2(stats.maxDD)}
+          </div>
+          <div class="stat-card-change">&nbsp;</div>
+        </div>
       `;
 
-      const curve = buildEquityCurve(trades);
       const max = Math.max(1, ...curve.map(v => v.val));
       $('#equityCurve').innerHTML = curve.length
         ? curve.map(v => `
@@ -1728,7 +1855,6 @@
         acctSel.value = currentValue;
       }
 
-      // Filtered account summary
       const perAccount = new Map();
       for (const t of trades) {
         const id = t.accountId || 'none';
@@ -1788,7 +1914,6 @@
         }).join('');
       }
 
-      // Active account full history (ALL TIME)
       const activeId = Accounts.activeId();
       const activeBody = $('#activeAccountBody');
       if (!activeId) {
@@ -1920,6 +2045,7 @@
               <div class="action-buttons">
                 <button class="action-btn primary" data-action="trade">Trade Now</button>
                 <button class="action-btn" data-action="stats">View Stats</button>
+                <button class="action-btn" data-action="export">Export Key</button>
                 <button class="action-btn" data-action="delete">Delete</button>
               </div>
             </div>
@@ -1953,6 +2079,15 @@
             if (act === 'stats') {
               Accounts.setActive(id);
               setActiveNav('history');
+            }
+            if (act === 'export') {
+              try {
+                const key = makeAccountKey(id);
+                $('#exportKeyTextarea').value = key;
+                $('#exportKeyModal').classList.add('active');
+              } catch (err) {
+                alert(err.message || 'Failed to generate Account Key.');
+              }
             }
             if (act === 'delete') {
               if (confirm('Delete this account?')) {
@@ -2106,6 +2241,46 @@
     $('#resetData').addEventListener('click', resetData);
     $('#settingsModal').addEventListener('click', (e) => {
       if (e.target.id === 'settingsModal') closeSettingsModal();
+    });
+
+    // Account key export / import
+    $('#openImport').addEventListener('click', () => {
+      $('#importKeyTextarea').value = '';
+      $('#importKeyModal').classList.add('active');
+    });
+
+    $('#closeExportKey').addEventListener('click', () => {
+      $('#exportKeyModal').classList.remove('active');
+    });
+
+    $('#exportKeyModal').addEventListener('click', (e) => {
+      if (e.target.id === 'exportKeyModal') {
+        $('#exportKeyModal').classList.remove('active');
+      }
+    });
+
+    $('#cancelImportKey').addEventListener('click', () => {
+      $('#importKeyModal').classList.remove('active');
+    });
+
+    $('#confirmImportKey').addEventListener('click', () => {
+      const key = $('#importKeyTextarea').value.trim();
+      if (!key) {
+        alert('Paste an Account Key first.');
+        return;
+      }
+      try {
+        importAccountFromKey(key);
+        $('#importKeyModal').classList.remove('active');
+      } catch (err) {
+        alert(err.message || 'Failed to import Account Key.');
+      }
+    });
+
+    $('#importKeyModal').addEventListener('click', (e) => {
+      if (e.target.id === 'importKeyModal') {
+        $('#importKeyModal').classList.remove('active');
+      }
     });
 
     // Segment end modal actions
